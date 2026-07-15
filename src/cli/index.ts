@@ -2,12 +2,12 @@
  * Event Cloud CLI — Hexo-style commands
  *
  * Commands (with aliases):
- *   ec generate | g     Build the static site           [-w] [-d] [-v] [-s] [-c]
- *   ec server   | s     Serve locally (auto-build)      [-p] [-w] [--no-build] [-o]
- *   ec deploy   | d     Deploy to remote host            [--platform] [-c]
- *   ec clean    | cl    Remove the output directory      [-c]
- *   ec new      | n     Create a new page in the graph   <title> [-c]
- *   ec init     [folder]  Scaffold a new project          [-g] [-o] [-f]
+ *   evc generate | g     Build the static site           [-w] [-d] [-v] [-s] [-c]
+ *   evc server   | s     Serve locally (auto-build)      [-p] [-w] [--no-build] [-o]
+ *   evc deploy   | d     Deploy to remote host            [--platform] [-c]
+ *   evc clean    | cl    Remove the output directory      [-c]
+ *   evc new      | n     Create a new page in the graph   <title> [-c]
+ *   evc init     [folder]  Scaffold a new project          [-g] [-o] [-f]
  *
  * Inspired by Hexo: `hexo g`, `hexo s`, `hexo clean`, `hexo new`
  */
@@ -26,7 +26,7 @@ import type { TMConfig } from '../types';
 const program = new Command();
 
 program
-  .name('ec')
+  .name('evc')
   .description('Event Cloud — Static Event Site Generator')
   .version('0.1.0');
 
@@ -109,7 +109,7 @@ function startServer(
       if (explicitPort) {
         // User explicitly asked for this port — show error
         console.error(chalk.red(`✗ Port ${port} is already in use.`));
-        console.error(chalk.gray(`  Try a different port: tm s -p ${port + 1}`));
+        console.error(chalk.gray(`  Try a different port: evc s -p ${port + 1}`));
         console.error(chalk.gray(`  Or kill the process: npx kill-port ${port}`));
         process.exit(1);
       } else {
@@ -167,7 +167,7 @@ function openBrowser(url: string): void {
 }
 
 // ══════════════════════════════════════════════════════════════
-// tm generate | g
+// evc generate | g
 // ══════════════════════════════════════════════════════════════
 
 function makeGenerateCommand(name: string, alias: string) {
@@ -222,7 +222,7 @@ makeGenerateCommand('generate', 'g');
 makeGenerateCommand('build', 'b');
 
 // ══════════════════════════════════════════════════════════════
-// tm server | s
+// evc server | s
 // ══════════════════════════════════════════════════════════════
 
 program
@@ -265,7 +265,7 @@ program
 
     if (!fs.existsSync(root)) {
       console.error(chalk.red(`✗ Output directory not found: ${root}`));
-      console.error(chalk.gray('  Run `tm g` first, or remove --no-build flag.'));
+      console.error(chalk.gray('  Run `evc g` first, or remove --no-build flag.'));
       process.exit(1);
     }
 
@@ -277,7 +277,7 @@ program
 program
   .command('preview')
   .alias('p')
-  .description('Alias for `ec server`')
+  .description('Alias for `evc server`')
   .option('-p, --port <number>', 'Port number', '3000')
   .option('-c, --config <path>', 'Config file path', 'config.json')
   .option('--no-build', 'Skip the initial build')
@@ -312,7 +312,7 @@ program
   });
 
 // ══════════════════════════════════════════════════════════════
-// tm clean | cl
+// evc clean | cl
 // ══════════════════════════════════════════════════════════════
 
 program
@@ -335,11 +335,11 @@ program
     fs.rmSync(outputDir, { recursive: true, force: true });
 
     console.log(chalk.green('✓ Cleaned.'));
-    console.log(chalk.gray('  Run `tm g` to rebuild.'));
+    console.log(chalk.gray('  Run `evc g` to rebuild.'));
   });
 
 // ══════════════════════════════════════════════════════════════
-// tm new | n
+// evc new | n
 // ══════════════════════════════════════════════════════════════
 
 program
@@ -383,11 +383,89 @@ Write your content here.
     console.log(chalk.green('✓ Created new page.'));
     console.log(chalk.gray(`   ${filePath}`));
     console.log();
-    console.log(chalk.gray('  Run `tm g` to rebuild, or `tm s` to preview.'));
+    console.log(chalk.gray('  Run `evc g` to rebuild, or `evc s` to preview.'));
   });
 
 // ══════════════════════════════════════════════════════════════
-// tm deploy | d
+async function execGit(cmd: string, cwd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    exec(cmd, { cwd, maxBuffer: 1024 * 1024 * 10 }, (err, stdout, stderr) => {
+      if (err) {
+        reject(new Error(`Git command failed: ${cmd}\n${stderr}`));
+      } else {
+        resolve(stdout.trim());
+      }
+    });
+  });
+}
+
+async function deployToGithubPages(config: TMConfig): Promise<void> {
+  const deployConfig = config.deploy;
+  if (!deployConfig || deployConfig.type !== 'github-pages') {
+    console.error(chalk.red('✗ Deploy config not found or invalid.'));
+    process.exit(1);
+  }
+
+  const repo = deployConfig.repo;
+  const branch = deployConfig.branch || 'gh-pages';
+  const message = deployConfig.message || 'Deploy Event Cloud';
+  const outputPath = config.outputPath;
+
+  if (!fs.existsSync(outputPath)) {
+    console.error(chalk.red(`✗ Output directory not found: ${outputPath}`));
+    process.exit(1);
+  }
+
+  if (!repo) {
+    console.error(chalk.red('✗ GitHub repository URL is required.'));
+    console.error(chalk.gray('  Please set "deploy.repo" in config.json'));
+    process.exit(1);
+  }
+
+  console.log(chalk.cyan(`   Deploying to ${repo}#${branch}...`));
+
+  const originalDir = process.cwd();
+  try {
+    process.chdir(outputPath);
+
+    if (fs.existsSync('.git')) {
+      await execGit('git fetch origin', outputPath);
+      await execGit(`git checkout ${branch}`, outputPath);
+    } else {
+      await execGit('git init', outputPath);
+      await execGit(`git checkout -b ${branch}`, outputPath);
+    }
+
+    await execGit('git add -A', outputPath);
+
+    const status = await execGit('git status --porcelain', outputPath);
+    if (!status) {
+      console.log(chalk.yellow('⚠  No changes to deploy.'));
+      return;
+    }
+
+    await execGit('git config user.name "Event Cloud"', outputPath);
+    await execGit('git config user.email "deploy@event-cloud.local"', outputPath);
+
+    await execGit(`git commit -m "${message}"`, outputPath);
+
+    await execGit(`git push -f ${repo} ${branch}`, outputPath);
+
+    console.log(chalk.green('✓ Deploy complete!'));
+    const match = repo.match(/github\.com\/([^/]+)\/([^/.]+)/);
+    if (match) {
+      console.log(chalk.gray(`   Your site is now live at: https://${match[1]}.github.io/${match[2]}/`));
+    }
+  } catch (err: any) {
+    console.error(chalk.red('✗ Deploy failed:'));
+    console.error(chalk.gray(err.message));
+    process.exit(1);
+  } finally {
+    process.chdir(originalDir);
+  }
+}
+
+// evc deploy | d
 // ══════════════════════════════════════════════════════════════
 
 program
@@ -411,9 +489,9 @@ program
       process.exit(1);
     }
 
-    // Auto-build before deploy unless --no-build
+    const config = loadConfig(opts.config);
+
     if (opts.build) {
-      const config = loadConfig(opts.config);
       console.log(chalk.gray('   Building before deploy...'));
       try {
         await runBuild(config, {});
@@ -424,27 +502,27 @@ program
       }
     }
 
-    console.log(chalk.yellow(`⚠  Deploy to ${platform} is not yet implemented.`));
-    console.log(chalk.gray('  This will be available in a future release.'));
-    console.log();
-    console.log(chalk.gray('  Manual deployment guide:'));
-    console.log();
-
     if (platform === 'github-pages') {
-      console.log(chalk.white('  GitHub Pages:'));
-      console.log(chalk.gray('    cd dist && git init && git add -A'));
-      console.log(chalk.gray('    git commit -m "deploy" && git push origin gh-pages --force'));
+      await deployToGithubPages(config);
     } else if (platform === 'r2') {
+      console.log(chalk.yellow(`⚠  Deploy to ${platform} is not yet implemented.`));
+      console.log(chalk.gray('  This will be available in a future release.'));
+      console.log();
+      console.log(chalk.gray('  Manual deployment guide:'));
       console.log(chalk.white('  Cloudflare R2:'));
       console.log(chalk.gray('    wrangler r2 object put <bucket>/index.html --file dist/index.html'));
     } else if (platform === 'oss') {
+      console.log(chalk.yellow(`⚠  Deploy to ${platform} is not yet implemented.`));
+      console.log(chalk.gray('  This will be available in a future release.'));
+      console.log();
+      console.log(chalk.gray('  Manual deployment guide:'));
       console.log(chalk.white('  Aliyun OSS:'));
       console.log(chalk.gray('    ossutil sync dist/ oss://<bucket>/'));
     }
   });
 
 // ══════════════════════════════════════════════════════════════
-// tm init [folder]
+// evc init [folder]
 // ══════════════════════════════════════════════════════════════
 
 program
@@ -606,10 +684,10 @@ Here's a photo placeholder:
       console.log(chalk.cyan(`    cd ${folder}`));
     }
     console.log(chalk.gray('    1. Edit pages in graph/pages/'));
-    console.log(chalk.gray('    2. Run ') + chalk.cyan('tm g') + chalk.gray(' to build'));
-    console.log(chalk.gray('    3. Run ') + chalk.cyan('tm s') + chalk.gray(' to preview at http://localhost:3000'));
+    console.log(chalk.gray('    2. Run ') + chalk.cyan('evc g') + chalk.gray(' to build'));
+    console.log(chalk.gray('    3. Run ') + chalk.cyan('evc s') + chalk.gray(' to preview at http://localhost:3000'));
     console.log();
-    console.log(chalk.gray('    Or run ') + chalk.cyan('tm s -o') + chalk.gray(' to build + serve + open browser'));
+    console.log(chalk.gray('    Or run ') + chalk.cyan('evc s -o') + chalk.gray(' to build + serve + open browser'));
   });
 
 // ══════════════════════════════════════════════════════════════
