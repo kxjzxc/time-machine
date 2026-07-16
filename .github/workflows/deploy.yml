@@ -1,0 +1,67 @@
+name: Deploy Event Cloud
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  repository_dispatch:
+    types:
+      - graph-update
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - name: Checkout Event Cloud
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Update Graph Submodule
+        id: update-submodule
+        run: |
+          git submodule update --remote --merge
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add graph
+          if git diff --cached --quiet; then
+            echo "::set-output name=has-changes::false"
+            echo "No submodule changes to commit"
+          else
+            echo "::set-output name=has-changes::true"
+            git commit -m "Update graph submodule from webhook"
+            git push origin ${{ github.ref_name }}
+          fi
+
+      - name: Exit if no changes
+        if: steps.update-submodule.outputs.has-changes == 'false'
+        run: |
+          echo "Graph submodule is up-to-date. No deployment needed."
+          exit 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Project
+        run: npm run build
+
+      - name: Generate Site
+        run: npx evc generate
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          commit_message: "Deploy Event Cloud - Graph updated"
