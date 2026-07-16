@@ -185,12 +185,7 @@ export class LogseqParser implements IParser {
       // Skip H1 heading if it matches the page name
       const h1Match = line.trim().match(/^#\s+(.+)$/);
       if (h1Match && h1Match[1].trim() === pageName) continue;
-      // Strip leading list markers (- or *) from top-level items
-      let processedLine = line;
-      if (!line.startsWith('  ') && !line.startsWith('\t')) {
-        processedLine = line.replace(/^[-*]\s+/, '');
-      }
-      cleaned.push(processedLine);
+      cleaned.push(line);
     }
 
     return cleaned.join('\n').trim();
@@ -518,6 +513,9 @@ export class LogseqParser implements IParser {
 
     // Strip Logseq embed images: ![[path]]
     processed = processed.replace(/!\[\[([^\]]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov))\]\]/gi, '');
+    
+    // Clean up empty backticks left by stripped images
+    processed = processed.replace(/`{2,}/g, '').replace(/`\s*`/g, '');
 
     // Convert [[links]] to styled anchors
     processed = processed.replace(
