@@ -125,7 +125,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   width: 95%;
-  max-width: 800px;
+  max-width: 560px;
   height: 85vh;
   max-height: 700px;
   overflow: hidden;
