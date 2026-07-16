@@ -34,8 +34,20 @@
     catch(e) { console.error('Failed to parse event data:', e); return []; }
   }
 
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, function(m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+    });
+  }
+
   var currentEventIndex = -1;
   var allEvents = [];
+  var historyStack = [];
+  var isRandomMode = false;
+  var cardSource = null;
+  var currentDayEvents = null;
+  var currentDayDate = null;
 
   var modal = document.getElementById('card-modal');
   var cardDate = document.getElementById('card-date');
@@ -49,6 +61,9 @@
   function closeCard() {
     if (modal) modal.classList.remove('active');
     currentEventIndex = -1;
+    historyStack = [];
+    isRandomMode = false;
+    cardSource = null;
   }
 
   function renderCard(event) {
@@ -56,7 +71,19 @@
 
     cardDate.textContent = event.date;
     cardTitle.textContent = event.title;
-    
+
+    var randomBtn = document.getElementById('btn-random');
+    if (randomBtn) {
+      randomBtn.style.display = '';
+      if (isRandomMode) {
+        randomBtn.textContent = '→ 下一站';
+      } else {
+        randomBtn.textContent = '← 返回';
+      }
+    }
+    var reselectBtn = document.getElementById('btn-reselect');
+    if (reselectBtn) reselectBtn.style.display = 'none';
+
     var content = event.contentHtml || '<p>No content</p>';
     if (event.media) {
       var mediaMap = {};
@@ -81,14 +108,14 @@
         if (m.type === 'image') {
           var src = m.previewPath || m.thumbnailPath;
           if (src) {
-            mediaHtml += '<img src="' + src + '" alt="' + (m.alt || '') + '" loading="lazy">';
+            mediaHtml += '<img src="' + escapeHtml(src) + '" alt="' + escapeHtml(m.alt || '') + '" loading="lazy">';
           }
         } else if (m.type === 'video' && m.thumbnailPath) {
-          mediaHtml += '<video controls preload="metadata"><source src="' + m.thumbnailPath + '" type="video/mp4"></video>';
+          mediaHtml += '<video controls preload="metadata"><source src="' + escapeHtml(m.thumbnailPath) + '" type="video/mp4"></video>';
         }
       });
       cardMedia.innerHTML = mediaHtml;
-      cardMedia.style.display = mediaHtml ? 'grid' : 'none';
+      cardMedia.style.display = mediaHtml ? 'flex' : 'none';
     }
 
     if (cardTags) {
@@ -106,7 +133,7 @@
     if (cardLinks) {
       if (event.links && event.links.length > 0) {
         cardLinks.innerHTML = event.links.map(function(l) {
-          return '<a href="#" data-link="' + l + '" class="card-link">' + l + '</a>';
+          return '<a href="#" data-link="' + escapeHtml(l) + '" class="card-link">' + escapeHtml(l) + '</a>';
         }).join('');
         cardLinks.style.display = 'block';
       } else {
@@ -116,8 +143,14 @@
     }
   }
 
-  function openCard(index) {
+  function openCard(index, startRandomMode) {
     if (index < 0 || index >= allEvents.length) return;
+    if (startRandomMode) {
+      isRandomMode = true;
+      historyStack = [];
+    } else if (currentEventIndex >= 0) {
+      historyStack.push(currentEventIndex);
+    }
     currentEventIndex = index;
     var event = allEvents[index];
     unlock(event.id);
@@ -125,13 +158,36 @@
     if (modal) modal.classList.add('active');
   }
 
+  function navigateBack() {
+    if (historyStack.length > 0) {
+      var prevState = historyStack.pop();
+      if (prevState.type === 'day-selector') {
+        showDaySelector(prevState.date, prevState.events);
+      } else {
+        currentEventIndex = prevState;
+        var event = allEvents[prevState];
+        renderCard(event);
+      }
+    } else {
+      closeCard();
+      if (cardSource === 'date-picker') {
+        var dateModal = document.getElementById('date-modal');
+        if (dateModal) dateModal.classList.add('active');
+      }
+    }
+  }
+
   function randomCard() {
     if (allEvents.length === 0) return;
-    var randomIndex = Math.floor(Math.random() * allEvents.length);
-    while (randomIndex === currentEventIndex && allEvents.length > 1) {
-      randomIndex = Math.floor(Math.random() * allEvents.length);
+    if (isRandomMode) {
+      var randomIndex = Math.floor(Math.random() * allEvents.length);
+      while (randomIndex === currentEventIndex && allEvents.length > 1) {
+        randomIndex = Math.floor(Math.random() * allEvents.length);
+      }
+      openCard(randomIndex);
+    } else {
+      navigateBack();
     }
-    openCard(randomIndex);
   }
 
   var launchBtn = document.getElementById('launch-btn');
@@ -142,7 +198,8 @@
     if (totalEl) totalEl.textContent = allEvents.length;
 
     var unlocked = getUnlocked();
-    var unlockedCount = Object.keys(unlocked).length;
+    var validEventIds = new Set(allEvents.map(function(e) { return e.id; }));
+    var unlockedCount = Object.keys(unlocked).filter(function(id) { return validEventIds.has(id); }).length;
     var unlockedEl = document.getElementById('unlocked-count');
     if (unlockedEl) unlockedEl.textContent = unlockedCount;
 
@@ -161,7 +218,107 @@
       var event = pool[randomIndex];
       var globalIndex = allEvents.findIndex(function(e) { return e.id === event.id; });
 
-      openCard(globalIndex);
+      historyStack = [];
+      openCard(globalIndex, true);
+    });
+
+    var dateJumpBtn = document.getElementById('date-jump-btn');
+    var dateModal = document.getElementById('date-modal');
+    var dateClose = document.getElementById('date-close');
+    var dateConfirm = document.getElementById('date-confirm');
+    var datePicker = document.getElementById('date-picker');
+
+    if (dateJumpBtn && dateModal) {
+      dateJumpBtn.addEventListener('click', function() {
+        if (datePicker) {
+          var today = new Date();
+          datePicker.value = today.toISOString().split('T')[0];
+        }
+        dateModal.classList.add('active');
+      });
+    }
+
+    if (dateClose && dateModal) {
+      dateClose.addEventListener('click', function() {
+        dateModal.classList.remove('active');
+      });
+      dateModal.addEventListener('click', function(e) {
+        if (e.target === dateModal) dateModal.classList.remove('active');
+      });
+    }
+
+    if (dateConfirm && datePicker) {
+      dateConfirm.addEventListener('click', function() {
+        var date = datePicker.value;
+        if (!date) return;
+        var dayEvents = allEvents.filter(function(e) { return e.hasValidDate && e.date === date; });
+        dateModal.classList.remove('active');
+        if (dayEvents.length === 0) {
+          showMemoryLocked(date);
+        } else if (dayEvents.length === 1) {
+          var index = allEvents.findIndex(function(e) { return e.id === dayEvents[0].id; });
+          if (index >= 0) {
+            historyStack = [];
+            cardSource = 'date-picker';
+            openCard(index);
+          }
+        } else {
+          cardSource = 'date-picker';
+          showDaySelector(date, dayEvents);
+        }
+      });
+    }
+  }
+
+  function showMemoryLocked(date) {
+    if (!modal) return;
+    cardDate.textContent = date;
+    cardTitle.textContent = '记忆尚未解锁';
+    cardContent.innerHTML = '<p style="text-align:center;color:var(--text-dim);padding:2rem 0;">这一天没有留下任何记录。</p>';
+    if (cardMedia) { cardMedia.innerHTML = ''; cardMedia.style.display = 'none'; }
+    if (cardTags) { cardTags.innerHTML = ''; cardTags.style.display = 'none'; }
+    if (cardLinks) { cardLinks.innerHTML = ''; cardLinks.style.display = 'none'; }
+    var randomBtn = document.getElementById('btn-random');
+    if (randomBtn) randomBtn.style.display = 'none';
+    var reselectBtn = document.getElementById('btn-reselect');
+    if (reselectBtn) reselectBtn.style.display = '';
+    modal.classList.add('active');
+  }
+
+  function showDaySelector(date, dayEvents) {
+    if (!modal) return;
+    currentDayDate = date;
+    currentDayEvents = dayEvents;
+    cardDate.textContent = date;
+    cardTitle.textContent = '选择记忆';
+    var listHtml = dayEvents.map(function(e) {
+      return '<div class="day-event-item" data-id="' + e.id + '">' +
+        '<div class="day-event-title">' + escapeHtml(e.title) + '</div>' +
+        (e.media && e.media.length > 0 ? '<div class="day-event-has-media">📷</div>' : '') +
+        '</div>';
+    }).join('');
+    cardContent.innerHTML = '<div class="day-event-list">' + listHtml + '</div>';
+    if (cardMedia) { cardMedia.innerHTML = ''; cardMedia.style.display = 'none'; }
+    if (cardTags) { cardTags.innerHTML = ''; cardTags.style.display = 'none'; }
+    if (cardLinks) { cardLinks.innerHTML = ''; cardLinks.style.display = 'none'; }
+    var randomBtn = document.getElementById('btn-random');
+    if (randomBtn) randomBtn.style.display = '';
+    randomBtn.textContent = '← 返回';
+    var reselectBtn = document.getElementById('btn-reselect');
+    if (reselectBtn) reselectBtn.style.display = 'none';
+    modal.classList.add('active');
+
+    var items = document.querySelectorAll('.day-event-item');
+    items.forEach(function(item) {
+      item.addEventListener('click', function() {
+        var id = this.getAttribute('data-id');
+        var index = allEvents.findIndex(function(e) { return e.id === id; });
+        if (index >= 0) {
+          historyStack.push({ type: 'day-selector', date: date, events: dayEvents });
+          cardSource = 'date-picker';
+          openCard(index);
+        }
+      });
     });
   }
 
@@ -192,6 +349,15 @@
 
   if (randomBtn) {
     randomBtn.addEventListener('click', randomCard);
+  }
+
+  var reselectBtn = document.getElementById('btn-reselect');
+  if (reselectBtn) {
+    reselectBtn.addEventListener('click', function() {
+      closeCard();
+      var dateModal = document.getElementById('date-modal');
+      if (dateModal) dateModal.classList.add('active');
+    });
   }
 
   document.addEventListener('keydown', function(e) {
@@ -268,12 +434,16 @@
       }).join('');
 
       archiveGrid.querySelectorAll('.archive-card').forEach(function(card) {
-        card.addEventListener('click', function() {
-          var id = card.getAttribute('data-id');
-          var index = allEvents.findIndex(function(e) { return e.id === id; });
-          if (index >= 0) openCard(index);
-        });
+      card.addEventListener('click', function() {
+        var id = card.getAttribute('data-id');
+        var index = allEvents.findIndex(function(e) { return e.id === id; });
+        if (index >= 0) {
+          historyStack = [];
+          cardSource = 'archive';
+          openCard(index);
+        }
       });
+    });
     }
 
     renderTags();
