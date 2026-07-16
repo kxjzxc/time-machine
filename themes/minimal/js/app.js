@@ -230,6 +230,10 @@
 
     if (dateJumpBtn && dateModal) {
       dateJumpBtn.addEventListener('click', function() {
+        if (datePicker) {
+          var today = new Date();
+          datePicker.value = today.toISOString().split('T')[0];
+        }
         dateModal.classList.add('active');
       });
     }
