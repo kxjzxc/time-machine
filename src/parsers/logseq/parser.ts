@@ -73,7 +73,12 @@ export class LogseqParser implements IParser {
         }
 
         const event = this.blockToEvent(block, journalDate, relPath, graphPath);
-        if (event) allEvents.push(event);
+        if (event) {
+          if (event.title === '-' || !event.title) {
+            console.log('[DEBUG] Empty title event from:', relPath, 'block:', block.content);
+          }
+          allEvents.push(event);
+        }
       }
     }
 
@@ -281,7 +286,7 @@ export class LogseqParser implements IParser {
       const isListItem = rawLine.trimStart().startsWith('- ') || rawLine.trimStart().startsWith('* ');
 
       if (!isListItem && !this.isProperty(trimmed)) {
-        if (stack.length > 0 && trimmed && !trimmed.startsWith('---')) {
+        if (stack.length > 0 && trimmed && !trimmed.startsWith('---') && trimmed !== '-') {
           const current = stack[stack.length - 1].block;
           if (current.children.length === 0) {
             current.content += '\n' + trimmed;
@@ -308,6 +313,8 @@ export class LogseqParser implements IParser {
       if (!isListItem) continue;
 
       const blockContent = trimmed.replace(/^[-*]\s+/, '');
+      if (!blockContent || blockContent === '-') continue;
+
       const block: LogseqBlock = {
         content: blockContent,
         properties: {},
