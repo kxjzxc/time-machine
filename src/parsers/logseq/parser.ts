@@ -9,6 +9,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { marked } from 'marked';
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+});
 import type { IParser, TMEvent, MediaAsset } from '../../types';
 
 // ─── Internal block representation ────────────────────────────
@@ -49,6 +53,28 @@ export class LogseqParser implements IParser {
       const referencedDate = pageDateMap.get(pageName);
       const event = this.pageToEvent(blocks, pageName, relPath, graphPath, file, referencedDate);
       if (event) allEvents.push(event);
+    }
+
+    const journalFiles = [...new Set(this.findMarkdownFiles(journalsDir))];
+    for (const file of journalFiles) {
+      const filename = path.basename(file, '.md');
+      const journalDate = this.extractDateFromFilename(filename);
+      if (!journalDate) continue;
+
+      const relPath = path.relative(graphPath, file);
+      const content = fs.readFileSync(file, 'utf-8');
+      const blocks = this.parseBlocks(content);
+
+      for (const block of blocks) {
+        const blockTitle = this.stripMarkdown(block.content).trim();
+        const pageFilePath = path.join(pagesDir, blockTitle + '.md');
+        if (fs.existsSync(pageFilePath)) {
+          continue;
+        }
+
+        const event = this.blockToEvent(block, journalDate, relPath, graphPath);
+        if (event) allEvents.push(event);
+      }
     }
 
     return allEvents;
@@ -248,11 +274,14 @@ export class LogseqParser implements IParser {
     const stack: { block: LogseqBlock; indent: number }[] = [];
 
     for (const rawLine of lines) {
-      // Skip empty lines and Logseq metadata
       const trimmed = rawLine.trim();
-      if (!trimmed || trimmed.startsWith('- ') === false && trimmed.startsWith('* ') === false && !this.isProperty(trimmed)) {
-        // Could be a continuation line — attach to current block
-        if (stack.length > 0 && trimmed && !trimmed.startsWith('---')) {
+      if (!trimmed) continue;
+
+      const indent = this.getIndent(rawLine);
+      const isListItem = rawLine.trimStart().startsWith('- ') || rawLine.trimStart().startsWith('* ');
+
+      if (!isListItem && !this.isProperty(trimmed)) {
+        if (stack.length > 0 && trimmed && !trimmed.startsWith('---') && trimmed !== '-') {
           const current = stack[stack.length - 1].block;
           if (current.children.length === 0) {
             current.content += '\n' + trimmed;
@@ -260,9 +289,6 @@ export class LogseqParser implements IParser {
         }
         continue;
       }
-
-      const indent = this.getIndent(rawLine);
-      const isListItem = trimmed.startsWith('- ') || trimmed.startsWith('* ');
 
       if (this.isProperty(trimmed)) {
         // Attach property to current block at this indent level
@@ -282,6 +308,8 @@ export class LogseqParser implements IParser {
       if (!isListItem) continue;
 
       const blockContent = trimmed.replace(/^[-*]\s+/, '');
+      if (!blockContent || blockContent === '-') continue;
+
       const block: LogseqBlock = {
         content: blockContent,
         properties: {},
@@ -523,11 +551,34 @@ export class LogseqParser implements IParser {
       (_, name: string) => `[${name}](#${name})`,
     );
 
-    // Convert to HTML
+    const iframeMatches: string[] = [];
+    processed = processed.replace(
+      /<iframe[^>]*>[\s\S]*?<\/iframe>/gi,
+      (match) => {
+        const placeholder = `<!--EVENT_CLOUD_IFRAME_${iframeMatches.length}-->`;
+        iframeMatches.push(match);
+        return placeholder;
+      },
+    );
+
     const html = marked.parse(processed, { async: false }) as string;
 
+    let result = html;
+    iframeMatches.forEach((iframe, index) => {
+      const placeholder = `<!--EVENT_CLOUD_IFRAME_${index}-->`;
+      if (result.includes(placeholder)) {
+        result = result.replace(placeholder, iframe);
+      }
+    });
+
+    const remainingPlaceholders = result.match(/<!--EVENT_CLOUD_IFRAME_\d+-->/g);
+    const missing = iframeMatches.length - (remainingPlaceholders ? remainingPlaceholders.length : 0);
+    if (missing > 0) {
+      console.warn(`[parser] ${missing} iframe(s) lost during markdown render`);
+    }
+
     // Post-process: make Logseq link anchors styled
-    let result = html.replace(
+    result = result.replace(
       /<a href="#([^"]+)">/g,
       '<a href="#$1" class="tm-link">',
     );
