@@ -73,12 +73,7 @@ export class LogseqParser implements IParser {
         }
 
         const event = this.blockToEvent(block, journalDate, relPath, graphPath);
-        if (event) {
-          if (event.title === '-' || !event.title) {
-            console.log('[DEBUG] Empty title event from:', relPath, 'block:', block.content);
-          }
-          allEvents.push(event);
-        }
+        if (event) allEvents.push(event);
       }
     }
 
