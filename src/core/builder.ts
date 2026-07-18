@@ -95,6 +95,10 @@ export class Builder {
     const videosDir = path.join(assetsDir, 'videos');
 
     for (const event of events) {
+      // Map from original asset path → processed site-relative paths
+      const origToThumb = new Map<string, string>();
+      const origToPreview = new Map<string, string>();
+
       for (const asset of event.media) {
         if (asset.type === 'image' && fs.existsSync(asset.originalPath)) {
           const processed = await imageProcessor.process(
@@ -111,6 +115,10 @@ export class Builder {
             this.config.outputPath,
             processed.previewPath,
           ).replace(/\\/g, '/');
+
+          // Track mapping for contentHtml rewriting
+          origToThumb.set(asset.originalPath, asset.thumbnailPath);
+          origToPreview.set(asset.originalPath, asset.previewPath);
         } else if (asset.type === 'video' && fs.existsSync(asset.originalPath)) {
           // Copy video file to dist/assets/videos/
           if (!fs.existsSync(videosDir)) fs.mkdirSync(videosDir, { recursive: true });
@@ -119,6 +127,25 @@ export class Builder {
           fs.copyFileSync(asset.originalPath, destPath);
           asset.thumbnailPath = path.relative(this.config.outputPath, destPath).replace(/\\/g, '/');
         }
+      }
+
+      // Rewrite inline image paths in contentHtml:
+      // The parser emits <img class="ec-img" src="ORIG_PATH" data-ec-orig="ORIG_PATH">
+      // Replace src with the processed thumbnail path and add data-preview attribute.
+      if (origToThumb.size > 0) {
+        event.contentHtml = event.contentHtml.replace(
+          /<img([^>]*?)data-ec-orig="([^"]+)"([^>]*?)>/g,
+          (match, before: string, origSrc: string, after: string) => {
+            // Resolve the origSrc against the graph path to find the absolute path
+            const resolved = this.resolveOrigSrc(origSrc, this.config.logseqPath);
+            const thumb = origToThumb.get(resolved);
+            const preview = origToPreview.get(resolved);
+            if (thumb) {
+              return `<img${before}class="ec-img" src="../${thumb}" data-preview="../${preview || thumb}"${after}>`;
+            }
+            return match;
+          },
+        );
       }
     }
 
@@ -186,6 +213,22 @@ export class Builder {
     log(`  Output: ${this.config.outputPath}`);
 
     return stats;
+  }
+
+  /**
+   * Resolve a src attribute from contentHtml back to an absolute filesystem path.
+   * The parser writes paths like "../assets/foo.jpg" (relative to pages/) or
+   * absolute paths — this converts them back to the absolute form so we can
+   * look them up in the origToThumb map built during image processing.
+   */
+  private resolveOrigSrc(src: string, graphPath: string): string {
+    if (path.isAbsolute(src)) return src;
+    const cleaned = src.replace(/^(\.\.\/)+/, '');
+    const direct = path.resolve(graphPath, cleaned);
+    if (fs.existsSync(direct)) return direct;
+    const assetsPath = path.resolve(graphPath, 'assets', cleaned);
+    if (fs.existsSync(assetsPath)) return assetsPath;
+    return direct;
   }
 
   /**

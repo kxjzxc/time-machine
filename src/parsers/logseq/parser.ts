@@ -536,54 +536,65 @@ export class LogseqParser implements IParser {
   private renderMarkdown(markdown: string): string {
     if (!markdown) return '';
 
-    // Strip image markdown — images are rendered separately in the media gallery
-    let processed = markdown.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '');
+    let processed = markdown;
 
-    // Strip Logseq embed images: ![[path]]
-    processed = processed.replace(/!\[\[([^\]]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov))\]\]/gi, '');
-    
-    // Clean up empty backticks left by stripped images
-    processed = processed.replace(/`{2,}/g, '').replace(/`\s*`/g, '');
-
-    // Convert [[links]] to styled anchors
+    // ── Step 1: Extract iframes BEFORE markdown parsing ────────────
+    // Logseq stores iframes as list items: "- <iframe ...>...</iframe>"
+    // We lift them out of the list context so marked treats them as HTML blocks.
+    const iframeBlocks: string[] = [];
     processed = processed.replace(
-      /\[\[([^\]]+)\]\]/g,
-      (_, name: string) => `[${name}](#${name})`,
-    );
-
-    const iframeMatches: string[] = [];
-    processed = processed.replace(
-      /<iframe[^>]*>[\s\S]*?<\/iframe>/gi,
-      (match) => {
-        const placeholder = `<!--EVENT_CLOUD_IFRAME_${iframeMatches.length}-->`;
-        iframeMatches.push(match);
-        return placeholder;
+      /^[ \t]*-[ \t]+(<iframe[\s\S]*?<\/iframe>)/gim,
+      (_, iframe: string) => {
+        const idx = iframeBlocks.length;
+        iframeBlocks.push(iframe.trim());
+        // Use a fenced marker that marked will pass through as an HTML block
+        return `\n\n<div class="ec-embed" data-idx="${idx}"></div>\n\n`;
       },
     );
 
+    // ── Step 2: Replace inline images with placeholder <img> tags ──
+    // Images keep their original position in the text.
+    // The "data-ec-orig" attribute is used by the Builder to rewrite paths
+    // to processed WebP assets after image processing is complete.
+    processed = processed.replace(
+      /!\[([^\]]*)\]\(([^)]+)\)/g,
+      (_, alt: string, src: string) => {
+        const cleanSrc = src.trim();
+        return `<img class="ec-img" src="${cleanSrc}" data-ec-orig="${cleanSrc}" alt="${alt || ''}" loading="lazy">`;
+      },
+    );
+
+    // Logseq embed images: ![[path]] — same treatment
+    processed = processed.replace(
+      /!\[\[([^\]]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov))\]\]/gi,
+      (_, src: string) => {
+        const cleanSrc = src.trim();
+        return `<img class="ec-img" src="${cleanSrc}" data-ec-orig="${cleanSrc}" alt="" loading="lazy">`;
+      },
+    );
+
+    // ── Step 3: Convert [[links]] to styled anchors ─────────────────
+    processed = processed.replace(
+      /\[\[([^\]]+)\]\]/g,
+      (_, name: string) => `[${name}](#${encodeURIComponent(name)})`,
+    );
+
+    // ── Step 4: Render markdown ─────────────────────────────────────
     const html = marked.parse(processed, { async: false }) as string;
 
-    let result = html;
-    iframeMatches.forEach((iframe, index) => {
-      const placeholder = `<!--EVENT_CLOUD_IFRAME_${index}-->`;
-      if (result.includes(placeholder)) {
-        result = result.replace(placeholder, iframe);
-      }
-    });
+    // ── Step 5: Restore iframes in place ───────────────────────────
+    let result = html.replace(
+      /<div class="ec-embed" data-idx="(\d+)"><\/div>/g,
+      (_, idx: string) => iframeBlocks[parseInt(idx, 10)] ?? '',
+    );
 
-    const remainingPlaceholders = result.match(/<!--EVENT_CLOUD_IFRAME_\d+-->/g);
-    const missing = iframeMatches.length - (remainingPlaceholders ? remainingPlaceholders.length : 0);
-    if (missing > 0) {
-      console.warn(`[parser] ${missing} iframe(s) lost during markdown render`);
-    }
-
-    // Post-process: make Logseq link anchors styled
+    // ── Step 6: Style [[link]] anchors ──────────────────────────────
     result = result.replace(
       /<a href="#([^"]+)">/g,
       '<a href="#$1" class="tm-link">',
     );
 
-    // Clean up empty list items left by stripped images
+    // ── Step 7: Remove empty list items (e.g. Logseq blank blocks) ─
     result = result.replace(/<li>\s*<\/li>\s*/g, '');
 
     return result;
