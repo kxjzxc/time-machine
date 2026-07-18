@@ -443,7 +443,7 @@ async function deployToGithubPages(config: TMConfig): Promise<void> {
 
   const apiUrl = `https://api.github.com/repos/${slug}/dispatches`;
   const payload = JSON.stringify({
-    event_type: 'graph-update',
+    event_type: 'deploy',
     client_payload: { triggered_by: 'evc-deploy', timestamp: new Date().toISOString() },
   });
 

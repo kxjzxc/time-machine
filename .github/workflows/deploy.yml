@@ -7,14 +7,15 @@ on:
       - master
   repository_dispatch:
     types:
-      - graph-update
+      - deploy
+
+permissions:
+  contents: write
+  pages: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pages: write
     steps:
       - name: Checkout Event Cloud
         uses: actions/checkout@v4
@@ -36,13 +37,14 @@ jobs:
             echo "No submodule changes."
           else
             git commit -m "Update graph submodule"
-            git push origin ${{ github.ref_name }}
+            git push origin main
           fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
 
       - name: Install Dependencies
         run: npm ci
@@ -53,10 +55,19 @@ jobs:
       - name: Generate Site
         run: npx evc generate
 
+      - name: Set deploy commit message
+        id: deploy-msg
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "value=Deploy Event Cloud - Triggered by evc deploy" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=Deploy Event Cloud - Graph updated" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.EVENT_CLOUD_PAT }}
           publish_dir: ./dist
           publish_branch: gh-pages
-          commit_message: "Deploy Event Cloud - ${{ github.event_name == 'repository_dispatch' && 'Triggered by evc deploy' || 'Graph updated' }}"
+          commit_message: ${{ steps.deploy-msg.outputs.value }}
