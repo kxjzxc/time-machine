@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>沃集鲜神奇的商品 — Event Cloud</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <a href="../index.html" class="back-home">← 返回</a>
+  
+  <div class="event-page" data-event-id="2026-07-10-沃集鲜神奇的商品">
+    <header class="event-header">
+      <div class="event-date">2026-07-10</div>
+      <h1 class="event-title">沃集鲜神奇的商品 — Event Cloud</h1>
+    </header>
+    
+    <article class="event-content">
+      <ul>
+<li>虽然还有好几个月，但沃集鲜已经上架了奇妙口味的月饼，可惜热量太高，要不然我高低买一箱尝尝看。</li>
+<li>想起一个宝可梦——椰蛋树</li>
+<li>回到家常常看神奇口味的气泡水，有点像柠檬茶，整体口感还算不错，但后调有点独特，植物的气息。</li>
+</ul>
+<div class="event-media"><img src="../assets/thumbnails/2026-07-17-08-57-11.webp" data-preview="../assets/previews/2026-07-17-08-57-11.webp" alt="2026-07-17-08-57-11.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-08-57-53.webp" data-preview="../assets/previews/2026-07-17-08-57-53.webp" alt="2026-07-17-08-57-53.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-08-58-03.webp" data-preview="../assets/previews/2026-07-17-08-58-03.webp" alt="2026-07-17-08-58-03.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-08-58-18.webp" data-preview="../assets/previews/2026-07-17-08-58-18.webp" alt="2026-07-17-08-58-18.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-08-58-28.webp" data-preview="../assets/previews/2026-07-17-08-58-28.webp" alt="2026-07-17-08-58-28.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-09-02-58.webp" data-preview="../assets/previews/2026-07-17-09-02-58.webp" alt="2026-07-17-09-02-58.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-09-03-47.webp" data-preview="../assets/previews/2026-07-17-09-03-47.webp" alt="2026-07-17-09-03-47.jpeg" loading="lazy"></div>
+    </article>
+    
+    
+    <div class="event-media">
+      <div class="event-media"><img src="../assets/thumbnails/2026-07-17-08-57-11.webp" data-preview="../assets/previews/2026-07-17-08-57-11.webp" alt="2026-07-17-08-57-11.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-08-57-53.webp" data-preview="../assets/previews/2026-07-17-08-57-53.webp" alt="2026-07-17-08-57-53.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-08-58-03.webp" data-preview="../assets/previews/2026-07-17-08-58-03.webp" alt="2026-07-17-08-58-03.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-08-58-18.webp" data-preview="../assets/previews/2026-07-17-08-58-18.webp" alt="2026-07-17-08-58-18.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-08-58-28.webp" data-preview="../assets/previews/2026-07-17-08-58-28.webp" alt="2026-07-17-08-58-28.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-09-02-58.webp" data-preview="../assets/previews/2026-07-17-09-02-58.webp" alt="2026-07-17-09-02-58.jpeg" loading="lazy"><img src="../assets/thumbnails/2026-07-17-09-03-47.webp" data-preview="../assets/previews/2026-07-17-09-03-47.webp" alt="2026-07-17-09-03-47.jpeg" loading="lazy"></div>
+    </div>
+    
+    
+    
+    
+    
+  </div>
+  
+  <script src="../js/app.js"></script>
+  <script>
+    (function () {
+      // Lightbox for inline images (ec-img class)
+      var overlay = document.createElement('div');
+      overlay.id = 'ec-lightbox';
+      overlay.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;cursor:zoom-out;align-items:center;justify-content:center;';
+      var lightboxImg = document.createElement('img');
+      lightboxImg.style.cssText = 'max-width:92vw;max-height:92vh;border-radius:6px;box-shadow:0 4px 32px rgba(0,0,0,.6);';
+      overlay.appendChild(lightboxImg);
+      document.body.appendChild(overlay);
+
+      function openLightbox(src) {
+        lightboxImg.src = src;
+        overlay.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      }
+      function closeLightbox() {
+        overlay.style.display = 'none';
+        document.body.style.overflow = '';
+      }
+
+      overlay.addEventListener('click', closeLightbox);
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeLightbox();
+      });
+
+      document.querySelectorAll('.ec-img').forEach(function(img) {
+        img.style.cursor = 'zoom-in';
+        img.addEventListener('click', function() {
+          var preview = img.getAttribute('data-preview') || img.src;
+          openLightbox(preview);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
