@@ -131,15 +131,10 @@ export class DefaultRenderer implements IRenderer {
           </div>`
         : '';
 
-    const imageMedia = event.media.filter((m) => m.type === 'image' && m.thumbnailPath);
+    // Images are now rendered inline in contentHtml (preserving original order).
+    // Videos are still appended at the end since they use <video> tags which
+    // the parser doesn't currently emit inline.
     const videoMedia = event.media.filter((m) => m.type === 'video' && m.thumbnailPath);
-
-    const imageHtml = imageMedia
-      .map(
-        (m: MediaAsset) =>
-          `<img src="../${m.thumbnailPath}" data-preview="../${m.previewPath || m.thumbnailPath}" alt="${m.alt || ''}" loading="lazy">`,
-      )
-      .join('');
 
     const videoHtml = videoMedia
       .map(
@@ -150,11 +145,11 @@ export class DefaultRenderer implements IRenderer {
       )
       .join('');
 
-    const mediaHtml = imageHtml || videoHtml
-      ? `<div class="event-media">${imageHtml}${videoHtml}</div>`
+    const videoSection = videoHtml
+      ? `<div class="event-media event-videos">${videoHtml}</div>`
       : '';
 
-    const contentWithMedia = resolvedContent + mediaHtml;
+    const contentWithMedia = resolvedContent + videoSection;
 
     const siblings = siblingsHtml + backlinksHtml + relatedHtml;
 
@@ -163,7 +158,7 @@ export class DefaultRenderer implements IRenderer {
       date: event.date,
       eventId: event.id,
       content: contentWithMedia,
-      media: mediaHtml,
+      media: videoSection,
       tags: event.tags,
       tagsHtml,
       links: linksHtml,
