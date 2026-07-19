@@ -84,16 +84,14 @@
     var reselectBtn = document.getElementById('btn-reselect');
     if (reselectBtn) reselectBtn.style.display = 'none';
 
-    // Strip ec-img tags from contentHtml (images are rendered via event.media below,
-    // which has correct site-relative paths). Keep iframes in place.
-    var rawContent = event.contentHtml || '<p>No content</p>';
-    var textContent = rawContent.replace(/<img[^>]*class="ec-img"[^>]*>/g, '');
-
-    // Use DOMParser + live iframe recreation so Spotify/YouTube embeds actually load.
+    // Render inline content. Images already have correct processed paths inside
+    // contentHtml, so we keep them in place to preserve the document order.
+    // Use DOMParser + live iframe recreation so Spotify/YouTube embeds load.
     // innerHTML cannot create live iframes (browser security restriction).
+    var rawContent = event.contentHtml || '<p>No content</p>';
     cardContent.innerHTML = '';
     var parser = new DOMParser();
-    var doc = parser.parseFromString('<div>' + textContent + '</div>', 'text/html');
+    var doc = parser.parseFromString('<div>' + rawContent + '</div>', 'text/html');
     var wrapper = doc.body.firstChild;
     if (wrapper) {
       wrapper.querySelectorAll('iframe').forEach(function(srcIframe) {
@@ -109,14 +107,10 @@
     }
 
     if (cardMedia) {
+      // Only append videos here; images are already rendered inline.
       var mediaHtml = '';
       event.media.forEach(function(m) {
-        if (m.type === 'image') {
-          var src = m.previewPath || m.thumbnailPath;
-          if (src) {
-            mediaHtml += '<img src="' + escapeHtml(src) + '" alt="' + escapeHtml(m.alt || '') + '" loading="lazy">';
-          }
-        } else if (m.type === 'video' && m.thumbnailPath) {
+        if (m.type === 'video' && m.thumbnailPath) {
           mediaHtml += '<video controls preload="metadata"><source src="' + escapeHtml(m.thumbnailPath) + '" type="video/mp4"></video>';
         }
       });
