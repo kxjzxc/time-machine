@@ -84,33 +84,32 @@
     var reselectBtn = document.getElementById('btn-reselect');
     if (reselectBtn) reselectBtn.style.display = 'none';
 
-    var content = event.contentHtml || '<p>No content</p>';
-    if (event.media) {
-      var mediaMap = {};
-      event.media.forEach(function(m) {
-        if (m.previewPath) {
-          var filename = m.originalPath ? m.originalPath.split('/').pop() : '';
-          if (filename) mediaMap[filename] = m.previewPath;
-        } else if (m.thumbnailPath) {
-          var filename = m.originalPath ? m.originalPath.split('/').pop() : '';
-          if (filename) mediaMap[filename] = m.thumbnailPath;
-        }
-      });
-      for (var filename in mediaMap) {
-        content = content.replace(new RegExp('src="#' + filename + '"', 'g'), 'src="' + mediaMap[filename] + '"');
+    // Render inline content. Images already have correct processed paths inside
+    // contentHtml, so we keep them in place to preserve the document order.
+    // Use innerHTML first, then recreate live iframes (innerHTML alone cannot
+    // create live iframes due to browser security restrictions).
+    var rawContent = event.contentHtml || '<p>No content</p>';
+    // Adjust image paths for modal context. contentHtml is stored with paths
+    // relative to event pages (events/*.html), which use ../assets/. The modal
+    // is rendered from index.html at dist root, so we need assets/.
+    rawContent = rawContent.replace(/\.\.\/assets\//g, 'assets/');
+
+    cardContent.innerHTML = rawContent;
+
+    // Recreate iframes as live elements so embeds (Spotify/YouTube) load.
+    cardContent.querySelectorAll('iframe').forEach(function(srcIframe) {
+      var liveIframe = document.createElement('iframe');
+      for (var i = 0; i < srcIframe.attributes.length; i++) {
+        liveIframe.setAttribute(srcIframe.attributes[i].name, srcIframe.attributes[i].value);
       }
-    }
-    cardContent.innerHTML = content;
+      srcIframe.parentNode.replaceChild(liveIframe, srcIframe);
+    });
 
     if (cardMedia) {
+      // Only append videos here; images are already rendered inline.
       var mediaHtml = '';
       event.media.forEach(function(m) {
-        if (m.type === 'image') {
-          var src = m.previewPath || m.thumbnailPath;
-          if (src) {
-            mediaHtml += '<img src="' + escapeHtml(src) + '" alt="' + escapeHtml(m.alt || '') + '" loading="lazy">';
-          }
-        } else if (m.type === 'video' && m.thumbnailPath) {
+        if (m.type === 'video' && m.thumbnailPath) {
           mediaHtml += '<video controls preload="metadata"><source src="' + escapeHtml(m.thumbnailPath) + '" type="video/mp4"></video>';
         }
       });

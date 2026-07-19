@@ -138,7 +138,7 @@ export class LogseqParser implements IParser {
     const tags = this.extractAllTags(rawContent, pageProperties);
     const links = this.extractLinks(rawContent);
     const media = this.extractMedia(rawContent, graphPath);
-    const contentRaw = this.stripProperties(rawContent, pageName);
+    const contentRaw = this.blocksToPageMarkdown(blocks);
     const contentHtml = this.renderMarkdown(contentRaw);
 
     return {
@@ -156,6 +156,29 @@ export class LogseqParser implements IParser {
       backlinkIds: [],
       relatedIds: [],
     };
+  }
+
+  /**
+   * Convert page-level Logseq blocks into markdown paragraphs.
+   *
+   * Each top-level block becomes its own paragraph, separated by blank lines,
+   * so marked renders them as <p> elements with proper spacing. Inline images
+   * stay in their original positions relative to the text.
+   * Nested children are kept as nested lists if present.
+   */
+  private blocksToPageMarkdown(blocks: LogseqBlock[]): string {
+    const paragraphs: string[] = [];
+    for (const block of blocks) {
+      let md = block.content;
+      if (block.children.length > 0) {
+        const childMd = this.childrenToMarkdown(block.children);
+        if (childMd) {
+          md += '\n' + childMd;
+        }
+      }
+      paragraphs.push(md);
+    }
+    return paragraphs.join('\n\n');
   }
 
   /**
